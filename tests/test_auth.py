@@ -1,22 +1,5 @@
 import pytest
 
-@pytest.fixture
-def valid_user_data():
-    return {
-        "email": "test.volunteer@example.com",
-        "password": "StrongPassword123!",
-        "password_confirm": "StrongPassword123!",
-        "role": "Volunteer",
-        "agreed_to_rules": True
-    }
-
-@pytest.fixture
-def login_data(valid_user_data):
-    return {
-        "username": valid_user_data["email"],
-        "password": valid_user_data["password"]
-    }
-
 def test_hello_world(client):
     response = client.get("/api/v1/hello-world")
     assert response.status_code == 200
