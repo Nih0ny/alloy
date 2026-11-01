@@ -4,6 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 
 from alloy.core.config import settings
+from alloy.api import auth
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -11,6 +12,7 @@ async def lifespan(app: FastAPI):
     app.state.mongo_client = client
 
     db = client[settings.DATABASE_NAME]
+    await db["users"].create_index("email", unique=True)
 
     yield
     app.state.mongo_client.close()
@@ -29,3 +31,5 @@ async def db_hello_world(request: Request):
     msg[0]["_id"] = str(msg[0]["_id"])
 
     return msg
+
+app.include_router(auth.router)
