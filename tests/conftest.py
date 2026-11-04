@@ -156,3 +156,63 @@ def event_create_data():
         },
         "volunteer_quota": 10
     }
+
+@pytest.fixture
+def create_user(client):
+    def _create(email, role):
+        data = {
+            "email": email,
+            "password": "StrongPassword123!",
+            "password_confirm": "StrongPassword123!",
+            "role": role,
+            "agreed_to_rules": True
+        }
+        client.post("/api/v1/auth/register", json=data)
+        res = client.post("/api/v1/auth/login", data={"username": email, "password": "StrongPassword123!"})
+        return {"Authorization": f"Bearer {res.json().get('access_token')}"}
+    return _create
+
+@pytest.fixture
+def vol1_headers(create_user):
+    return create_user("vol1@example.com", "Volunteer")
+
+@pytest.fixture
+def vol2_headers(create_user):
+    return create_user("vol2@example.com", "Volunteer")
+
+@pytest.fixture
+def org1_headers(create_user):
+    return create_user("org1@example.com", "Organizer")
+
+@pytest.fixture
+def org2_headers(create_user):
+    return create_user("org2@example.com", "Organizer")
+
+@pytest.fixture
+def active_event_id(client, org1_headers, admin_headers):
+    event_data = {
+        "title": "Park Cleanup Event for Testing",
+        "description": "We are gathering to clean up the central park from garbage. Join us! Minimum 50 characters here so it passes validation.",
+        "event_date": "2026-12-01T10:00:00Z",
+        "location": {
+            "address": "Central Park, Main Entrance",
+            "latitude": 49.42298,
+            "longitude": 26.98713
+        },
+        "volunteer_quota": 5
+    }
+    res = client.post("/api/v1/events", json=event_data, headers=org1_headers)
+    ev_id = res.json()["id"]
+
+    client.patch(f"/api/v1/events/{ev_id}/moderation", json={"action": "Approved"}, headers=admin_headers)
+    client.patch(f"/api/v1/events/{ev_id}/status", json={"status": "Open"}, headers=org1_headers)
+    return ev_id
+
+@pytest.fixture
+def test_application_id(client, vol1_headers, active_event_id):
+    payload = {
+        "motivation_letter": "I really want to help out!",
+        "agreed_to_share_contacts": True
+    }
+    res = client.post(f"/api/v1/events/{active_event_id}/applications", json=payload, headers=vol1_headers)
+    return res.json()["id"]
