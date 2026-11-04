@@ -7,9 +7,11 @@ from alloy.core.config import settings
 from alloy.core import security
 from alloy.repositories.user_repository import UserRepository
 from alloy.repositories.event_repository import EventRepository
+from alloy.repositories.application_repository import ApplicationRepository
 from alloy.services.auth_service import AuthService
 from alloy.services.profile_service import ProfileService
 from alloy.services.event_service import EventService
+from alloy.services.application_service import ApplicationService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -63,4 +65,16 @@ async def get_optional_current_user(
         return await get_current_user(token=token, user_repo=user_repo)
     except HTTPException:
         return None
+
+def get_application_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database)
+) -> ApplicationRepository:
+    return ApplicationRepository(db)
+
+def get_application_service(
+    app_repo: ApplicationRepository = Depends(get_application_repository),
+    event_repo: EventRepository = Depends(get_event_repository),
+    user_repo: UserRepository = Depends(get_user_repository)
+) -> ApplicationService:
+    return ApplicationService(app_repo, event_repo, user_repo)
 
