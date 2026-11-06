@@ -216,3 +216,41 @@ def test_application_id(client, vol1_headers, active_event_id):
     }
     res = client.post(f"/api/v1/events/{active_event_id}/applications", json=payload, headers=vol1_headers)
     return res.json()["id"]
+
+@pytest.fixture
+def review_context(client, create_user, admin_headers):
+    org_headers = create_user("org_review@example.com", "Organizer")
+    vol_headers = create_user("vol_review@example.com", "Volunteer")
+    
+    org_profile_res = client.get("/api/v1/profile/me", headers=org_headers)
+    org_id = org_profile_res.json()["id"]
+    
+    vol_profile_res = client.get("/api/v1/profile/me", headers=vol_headers)
+    vol_id = vol_profile_res.json()["id"]
+
+    event_data = {
+        "title": "Post-event review test",
+        "description": "Valid description length 50 chars for review testing.",
+        "event_date": "2026-12-01T10:00:00Z",
+        "location": {"address": "Test location", "latitude": 49.0, "longitude": 26.0},
+        "volunteer_quota": 2
+    }
+    event_res = client.post("/api/v1/events", json=event_data, headers=org_headers)
+    event_id = event_res.json()["id"]
+
+    client.patch(f"/api/v1/events/{event_id}/moderation", json={"action": "Approved"}, headers=admin_headers)
+    client.patch(f"/api/v1/events/{event_id}/status", json={"status": "Open"}, headers=org_headers)
+
+    app_res = client.post(f"/api/v1/events/{event_id}/applications", json={"agreed_to_share_contacts": True}, headers=vol_headers)
+    app_id = app_res.json()["id"]
+    client.patch(f"/api/v1/applications/{app_id}/review", json={"status": "Approved"}, headers=org_headers)
+    
+    client.patch(f"/api/v1/events/{event_id}/status", json={"status": "Completed"}, headers=org_headers)
+
+    return {
+        "org_headers": org_headers,
+        "vol_headers": vol_headers,
+        "org_id": org_id,
+        "vol_id": vol_id,
+        "event_id": event_id
+    }
