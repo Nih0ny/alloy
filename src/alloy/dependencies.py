@@ -8,10 +8,12 @@ from alloy.core import security
 from alloy.repositories.user_repository import UserRepository
 from alloy.repositories.event_repository import EventRepository
 from alloy.repositories.application_repository import ApplicationRepository
+from alloy.repositories.review_repository import ReviewRepository
 from alloy.services.auth_service import AuthService
 from alloy.services.profile_service import ProfileService
 from alloy.services.event_service import EventService
 from alloy.services.application_service import ApplicationService
+from alloy.services.review_service import ReviewService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -77,4 +79,17 @@ def get_application_service(
     user_repo: UserRepository = Depends(get_user_repository)
 ) -> ApplicationService:
     return ApplicationService(app_repo, event_repo, user_repo)
+
+def get_review_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database)
+) -> ReviewRepository:
+    return ReviewRepository(db)
+
+def get_review_service(
+    review_repo: ReviewRepository = Depends(get_review_repository),
+    event_repo: EventRepository = Depends(get_event_repository),
+    app_repo: ApplicationRepository = Depends(get_application_repository),
+    user_repo: UserRepository = Depends(get_user_repository)
+) -> ReviewService:
+    return ReviewService(review_repo, event_repo, app_repo, user_repo)
 

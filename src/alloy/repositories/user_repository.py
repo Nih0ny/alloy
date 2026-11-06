@@ -61,3 +61,13 @@ class UserRepository:
         except InvalidId:
             return None
         return await self.db["events"].find_one({"_id": obj_id}, {"title": 1, "status": 1})
+
+    async def update_user_rating(self, user_id: str, new_rating: float) -> None:
+        try:
+            obj_id = ObjectId(user_id)
+        except InvalidId:
+            return
+        await self.collection.update_one(
+            {"_id": obj_id},
+            {"$set": {"profile.rating": round(new_rating, 2)}}
+        )

@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 
 from alloy.core.config import settings
-from alloy.api import auth, profile, events, applications
+from alloy.api import auth, profile, events, applications, reviews
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,6 +24,12 @@ async def lifespan(app: FastAPI):
         unique=True
     )
     await db["applications"].create_index("volunteer_id")
+
+    await db["reviews"].create_index(
+        [("event_id", 1), ("reviewer_id", 1), ("reviewee_id", 1)],
+        unique=True
+    )
+    await db["reviews"].create_index("reviewee_id")
 
     os.makedirs("uploads/avatars", exist_ok=True)
     os.makedirs("uploads/events", exist_ok=True)
@@ -53,4 +59,5 @@ app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(events.router)
 app.include_router(applications.router)
+app.include_router(reviews.router)
 
