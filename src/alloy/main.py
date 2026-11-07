@@ -17,6 +17,7 @@ from alloy.api import (
     comments,
     messages,
     support,
+    complaints,
 )
 
 DEFAULT_CATEGORIES = ["Animals", "War", "IDPs", "Ecology", "Elderly Care"]
@@ -89,4 +90,5 @@ app.include_router(categories.router)
 app.include_router(comments.router)
 app.include_router(messages.router)
 app.include_router(support.router)
+app.include_router(complaints.router)
 

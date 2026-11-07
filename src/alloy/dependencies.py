@@ -9,6 +9,7 @@ from alloy.repositories.user_repository import UserRepository
 from alloy.repositories.event_repository import EventRepository
 from alloy.repositories.application_repository import ApplicationRepository
 from alloy.repositories.review_repository import ReviewRepository
+from alloy.repositories.complaint_repository import ComplaintRepository
 from alloy.services.auth_service import AuthService
 from alloy.services.profile_service import ProfileService
 from alloy.services.event_service import EventService
@@ -26,7 +27,7 @@ from alloy.services.communication_service import (
     MessageService,
     SupportService,
 )
-
+from alloy.services.complaint_service import ComplaintService
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -150,3 +151,17 @@ def get_support_service(
     user_repo: UserRepository = Depends(get_user_repository)
 ) -> SupportService:
     return SupportService(support_repo, user_repo)
+
+
+def get_complaint_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database)
+) -> ComplaintRepository:
+    return ComplaintRepository(db)
+
+def get_complaint_service(
+    complaint_repo: ComplaintRepository = Depends(get_complaint_repository),
+    user_repo: UserRepository = Depends(get_user_repository),
+    event_repo: EventRepository = Depends(get_event_repository),
+    comment_repo: CommentRepository = Depends(get_comment_repository)
+) -> ComplaintService:
+    return ComplaintService(complaint_repo, user_repo, event_repo, comment_repo)
