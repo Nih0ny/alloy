@@ -341,3 +341,57 @@ def comm_events(client, comm_users, comm_admin_headers):
 
     return {"open_id": open_id, "closed_id": closed_id}
 
+@pytest.fixture
+def users_for_complaints(client, create_user):
+    org_headers = create_user("org_comp@example.com", "Organizer")
+    vol_headers = create_user("vol_comp@example.com", "Volunteer")
+    
+    org_id = client.get("/api/v1/profile/me", headers=org_headers).json()["id"]
+    vol_id = client.get("/api/v1/profile/me", headers=vol_headers).json()["id"]
+    
+    return {
+        "org_headers": org_headers,
+        "vol_headers": vol_headers,
+        "org_id": org_id,
+        "vol_id": vol_id
+    }
+
+@pytest.fixture
+def target_event(client, users_for_complaints, admin_headers):
+    event_data = {
+        "title": "Event for complaints",
+        "description": "Valid description length 50 chars for testing communication.",
+        "event_date": "2026-12-01T10:00:00Z",
+        "location": {"address": "Test Address", "latitude": 49.0, "longitude": 26.0},
+        "volunteer_quota": 5
+    }
+    res = client.post("/api/v1/events", json=event_data, headers=users_for_complaints["org_headers"])
+    event_id = res.json()["id"]
+
+    mod_res = client.patch(
+        f"/api/v1/events/{event_id}/moderation", 
+        json={"action": "Approved"}, 
+        headers=admin_headers
+    )
+    
+    return event_id
+
+@pytest.fixture
+def target_comment(client, target_event, users_for_complaints):
+    res = client.post(
+        f"/api/v1/events/{target_event}/comments",
+        json={"text": "This is a spam comment that needs to be reported"},
+        headers=users_for_complaints["vol_headers"]
+    )
+    return res.json()["id"]
+
+@pytest.fixture
+def sample_complaint(client, users_for_complaints, target_event):
+    payload = {
+        "target_type": "Event",
+        "target_id": target_event,
+        "violation_category": "Spam",
+        "description": "This event seems to be a scam or spam."
+    }
+    res = client.post("/api/v1/complaints", json=payload, headers=users_for_complaints["vol_headers"])
+    return res.json()["id"]
