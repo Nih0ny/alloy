@@ -262,3 +262,82 @@ def review_context(client, create_user, admin_headers):
         "vol_id": vol_id,
         "event_id": event_id
     }
+
+@pytest.fixture
+def comm_admin_headers(client, mock_db):
+    admin_doc = {
+        "email": "admin_comm@example.com",
+        "hashed_password": security.get_password_hash("StrongPassword123!"), 
+        "role": "Admin",
+        "status": "Active",
+        "oauth_provider": None,
+        "profile": {
+            "full_name": "Main Administrator",
+            "phone": None,
+            "avatar_url": None,
+            "description": "Platform Administrator",
+            "rating": 0.0
+        },
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc)
+    }
+    asyncio.run(mock_db["users"].insert_one(admin_doc))
+    
+    res = client.post("/api/v1/auth/login", data={"username": "admin_comm@example.com", "password": "StrongPassword123!"})
+    if res.status_code != 200:
+        client.post("/api/v1/auth/register", json={
+            "email": "admin_comm@example.com", "password": "StrongPassword123!", "password_confirm": "StrongPassword123!", "role": "Admin", "agreed_to_rules": True
+        })
+        res = client.post("/api/v1/auth/login", data={"username": "admin_comm@example.com", "password": "StrongPassword123!"})
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+@pytest.fixture
+def comm_users(client, create_user, mock_db):
+    org_headers = create_user("org_comm@example.com", "Organizer")
+    vol1_headers = create_user("vol1_comm@example.com", "Volunteer")
+    vol2_headers = create_user("vol2_comm@example.com", "Volunteer")
+    blocked_headers = create_user("blocked_comm@example.com", "Volunteer")
+    
+    org_id = client.get("/api/v1/profile/me", headers=org_headers).json()["id"]
+    vol1_id = client.get("/api/v1/profile/me", headers=vol1_headers).json()["id"]
+    vol2_id = client.get("/api/v1/profile/me", headers=vol2_headers).json()["id"]
+    blocked_id = client.get("/api/v1/profile/me", headers=blocked_headers).json()["id"]
+
+    asyncio.run(mock_db["users"].update_one(
+        {"email": "blocked_comm@example.com"},
+        {"$set": {"status": "Blocked"}}
+    ))
+
+    return {
+        "org": org_headers,
+        "vol1": vol1_headers,
+        "vol2": vol2_headers,
+        "blocked": blocked_headers,
+        "org_id": org_id,
+        "vol1_id": vol1_id,
+        "vol2_id": vol2_id,
+        "blocked_id": blocked_id
+    }
+
+@pytest.fixture
+def comm_events(client, comm_users, comm_admin_headers):
+    event_data = {
+        "title": "Communication Open Event",
+        "description": "Valid description length 50 chars for testing communication.",
+        "event_date": "2026-12-01T10:00:00Z",
+        "location": {"address": "Comm Test Address", "latitude": 49.0, "longitude": 26.0},
+        "volunteer_quota": 5
+    }
+    res_open = client.post("/api/v1/events", json=event_data, headers=comm_users["org"])
+    open_id = res_open.json()["id"]
+    client.patch(f"/api/v1/events/{open_id}/moderation", json={"action": "Approved"}, headers=comm_admin_headers)
+    client.patch(f"/api/v1/events/{open_id}/status", json={"status": "Open"}, headers=comm_users["org"])
+
+    event_data["title"] = "Communication Closed Event"
+    res_closed = client.post("/api/v1/events", json=event_data, headers=comm_users["org"])
+    closed_id = res_closed.json()["id"]
+    client.patch(f"/api/v1/events/{closed_id}/moderation", json={"action": "Approved"}, headers=comm_admin_headers)
+    client.patch(f"/api/v1/events/{closed_id}/status", json={"status": "Completed"}, headers=comm_users["org"])
+
+    return {"open_id": open_id, "closed_id": closed_id}
+
