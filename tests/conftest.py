@@ -144,7 +144,10 @@ def admin_headers(client, mock_db, admin_data):
     return {"Authorization": f"Bearer {res.json()['access_token']}"}
 
 @pytest.fixture
-def event_create_data():
+def event_create_data(client, admin_headers):
+    cat_res = client.post("/api/v1/categories", json={"name": "General"}, headers=admin_headers)
+    valid_cat_id = cat_res.json()["id"]
+
     return {
         "title": "Clean up the central park",
         "description": "We are gathering to clean up the central park from garbage. Join us! Minimum 50 characters here so it passes validation.",
@@ -154,7 +157,8 @@ def event_create_data():
             "latitude": 49.42298,
             "longitude": 26.98713
         },
-        "volunteer_quota": 10
+        "volunteer_quota": 10,
+        "category_id": valid_cat_id  
     }
 
 @pytest.fixture
@@ -179,6 +183,10 @@ def vol1_headers(create_user):
 @pytest.fixture
 def vol2_headers(create_user):
     return create_user("vol2@example.com", "Volunteer")
+
+@pytest.fixture
+def org_headers(create_user):
+    return create_user("org1@example.com", "Organizer")
 
 @pytest.fixture
 def org1_headers(create_user):

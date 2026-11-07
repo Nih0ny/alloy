@@ -14,6 +14,9 @@ from alloy.services.profile_service import ProfileService
 from alloy.services.event_service import EventService
 from alloy.services.application_service import ApplicationService
 from alloy.services.review_service import ReviewService
+from alloy.repositories.category_repository import CategoryRepository
+from alloy.services.category_service import CategoryService
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -93,3 +96,13 @@ def get_review_service(
 ) -> ReviewService:
     return ReviewService(review_repo, event_repo, app_repo, user_repo)
 
+
+def get_category_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database)
+) -> CategoryRepository:
+    return CategoryRepository(db)
+
+def get_category_service(
+    category_repo: CategoryRepository = Depends(get_category_repository)
+) -> CategoryService:
+    return CategoryService(category_repo)

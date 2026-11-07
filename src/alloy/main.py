@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, UTC
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -6,7 +7,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 
 from alloy.core.config import settings
-from alloy.api import auth, profile, events, applications, reviews
+from alloy.api import auth, profile, events, applications, reviews, categories
+
+DEFAULT_CATEGORIES = ["Animals", "War", "IDPs", "Ecology", "Elderly Care"]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,6 +33,14 @@ async def lifespan(app: FastAPI):
         unique=True
     )
     await db["reviews"].create_index("reviewee_id")
+
+    await db["categories"].create_index("name", unique=True)
+    if await db["categories"].count_documents({}) == 0:
+        now = datetime.now(UTC)
+        await db["categories"].insert_many([
+            {"name": name, "is_archived": False, "created_at": now, "updated_at": now}
+            for name in DEFAULT_CATEGORIES
+        ])
 
     os.makedirs("uploads/avatars", exist_ok=True)
     os.makedirs("uploads/events", exist_ok=True)
@@ -60,4 +71,5 @@ app.include_router(profile.router)
 app.include_router(events.router)
 app.include_router(applications.router)
 app.include_router(reviews.router)
+app.include_router(categories.router)
 
