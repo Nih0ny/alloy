@@ -16,6 +16,17 @@ from alloy.services.application_service import ApplicationService
 from alloy.services.review_service import ReviewService
 from alloy.repositories.category_repository import CategoryRepository
 from alloy.services.category_service import CategoryService
+from alloy.repositories.communication_repository import (
+    CommentRepository,
+    MessageRepository,
+    SupportRepository,
+)
+from alloy.services.communication_service import (
+    CommentService,
+    MessageService,
+    SupportService,
+)
+
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -96,7 +107,6 @@ def get_review_service(
 ) -> ReviewService:
     return ReviewService(review_repo, event_repo, app_repo, user_repo)
 
-
 def get_category_repository(
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> CategoryRepository:
@@ -106,3 +116,37 @@ def get_category_service(
     category_repo: CategoryRepository = Depends(get_category_repository)
 ) -> CategoryService:
     return CategoryService(category_repo)
+
+def get_comment_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> CommentRepository:
+    return CommentRepository(db)
+
+
+def get_message_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> MessageRepository:
+    return MessageRepository(db)
+
+
+def get_support_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> SupportRepository:
+    return SupportRepository(db)
+
+
+def get_comment_service(
+    comment_repo: CommentRepository = Depends(get_comment_repository),
+    event_repo: EventRepository = Depends(get_event_repository),
+    user_repo: UserRepository = Depends(get_user_repository)
+) -> CommentService:
+    return CommentService(comment_repo, event_repo, user_repo)
+
+
+def get_message_service(
+    message_repo: MessageRepository = Depends(get_message_repository),
+    user_repo: UserRepository = Depends(get_user_repository),
+    event_repo: EventRepository = Depends(get_event_repository)
+) -> MessageService:
+    return MessageService(message_repo, user_repo, event_repo)
+
+
+def get_support_service(
+    support_repo: SupportRepository = Depends(get_support_repository),
+    user_repo: UserRepository = Depends(get_user_repository)
+) -> SupportService:
+    return SupportService(support_repo, user_repo)
