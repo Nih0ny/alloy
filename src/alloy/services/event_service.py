@@ -4,6 +4,7 @@ import aiofiles
 from datetime import datetime, UTC
 from typing import List, Optional
 from fastapi import HTTPException, UploadFile, status, File
+from bson import ObjectId
 
 from alloy.repositories.event_repository import EventRepository
 from alloy.repositories.user_repository import UserRepository
@@ -70,6 +71,20 @@ class EventService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only users with the 'Organizer' role can create events"
             )
+
+        if event_in.category_id:
+            category = await self.event_repository.db["categories"].find_one({
+                "$or": [
+                    {"_id": ObjectId(event_in.category_id)} if ObjectId.is_valid(event_in.category_id) else {"name": event_in.category_id},
+                    {"name": event_in.category_id}
+                ],
+                "is_archived": False
+            })
+            if not category:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="The selected category does not exist in the active directory"
+                )
 
         now = datetime.now(UTC)
         event_dict = {
@@ -150,6 +165,20 @@ class EventService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot edit a completed or cancelled event"
             )
+
+        if event_in.category_id:
+            category = await self.event_repository.db["categories"].find_one({
+                "$or": [
+                    {"_id": ObjectId(event_in.category_id)} if ObjectId.is_valid(event_in.category_id) else {"name": event_in.category_id},
+                    {"name": event_in.category_id}
+                ],
+                "is_archived": False
+            })
+            if not category:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="The selected category does not exist in the active directory"
+                )
 
         update_data = event_in.model_dump(exclude_unset=True)
         if not update_data:
