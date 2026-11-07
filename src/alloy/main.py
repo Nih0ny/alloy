@@ -7,7 +7,17 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 
 from alloy.core.config import settings
-from alloy.api import auth, profile, events, applications, reviews, categories
+from alloy.api import (
+    auth,
+    profile,
+    events,
+    applications,
+    reviews,
+    categories,
+    comments,
+    messages,
+    support,
+)
 
 DEFAULT_CATEGORIES = ["Animals", "War", "IDPs", "Ecology", "Elderly Care"]
 
@@ -41,6 +51,10 @@ async def lifespan(app: FastAPI):
             {"name": name, "is_archived": False, "created_at": now, "updated_at": now}
             for name in DEFAULT_CATEGORIES
         ])
+    await db["comments"].create_index([("event_id", 1), ("created_at", 1)])
+    await db["messages"].create_index([("sender_id", 1), ("recipient_id", 1), ("created_at", 1)])
+    await db["messages"].create_index([("recipient_id", 1), ("is_read", 1)])
+    await db["support_tickets"].create_index("user_id")
 
     os.makedirs("uploads/avatars", exist_ok=True)
     os.makedirs("uploads/events", exist_ok=True)
@@ -72,4 +86,7 @@ app.include_router(events.router)
 app.include_router(applications.router)
 app.include_router(reviews.router)
 app.include_router(categories.router)
+app.include_router(comments.router)
+app.include_router(messages.router)
+app.include_router(support.router)
 
