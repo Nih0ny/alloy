@@ -132,4 +132,28 @@ def test_delete_event_creator(client, organizer_headers, created_event_id):
     verify_response = client.get(f"/api/v1/events/{created_event_id}", headers=organizer_headers)
     assert verify_response.status_code == 404
 
+def test_create_event_with_valid_category(client, organizer_headers, admin_headers, event_create_data):
+    cat_res = client.post("/api/v1/categories", json={"name": "Valid Category"}, headers=admin_headers)
+    cat_id = cat_res.json()["id"]
 
+    valid_data = event_create_data.copy()
+    valid_data["category_id"] = cat_id
+
+    response = client.post("/api/v1/events", json=valid_data, headers=organizer_headers)
+    assert response.status_code == 201
+    assert response.json()["category_id"] == cat_id
+
+def test_create_event_invalid_category(client, organizer_headers, event_create_data):
+    invalid_data = event_create_data.copy()
+    invalid_data["category_id"] = "60c72b2f9b1d8b5a5f8e1234" 
+
+    response = client.post("/api/v1/events", json=invalid_data, headers=organizer_headers)
+    assert response.status_code == 400
+    assert "The selected category does not exist in the active directory" in response.json()["detail"]
+
+def test_update_event_invalid_category(client, organizer_headers, created_event_id):
+    update_data = {"category_id": "60c72b2f9b1d8b5a5f8e1234"}
+    
+    response = client.put(f"/api/v1/events/{created_event_id}", json=update_data, headers=organizer_headers)
+    assert response.status_code == 400
+    assert "The selected category does not exist in the active directory" in response.json()["detail"]
