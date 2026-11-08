@@ -47,3 +47,8 @@ def decode_token(token: str) -> dict | None:
         return None
     except jwt.InvalidTokenError:
         return None
+
+def create_password_reset_token(email: str) -> str:
+    expire = datetime.now(UTC) + timedelta(minutes=settings.RESET_TOKEN_EXPIRE_MINUTES)
+    to_encode = {"sub": email, "exp": expire, "type": "password_reset"}
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
