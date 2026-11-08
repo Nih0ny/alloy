@@ -71,3 +71,39 @@ class UserRepository:
             {"_id": obj_id},
             {"$set": {"profile.rating": round(new_rating, 2)}}
         )
+
+    async def set_password_reset_token(self, email: str, reset_token_hash: Optional[str]) -> None:
+        await self.collection.update_one(
+            {"email": email},
+            {"$set": {"hashed_reset_token": reset_token_hash}}
+        )
+
+    async def update_user_password(self, email: str, new_hashed_password: str) -> None:
+        await self.collection.update_one(
+            {"email": email},
+            {
+                "$set": {
+                    "hashed_password": new_hashed_password,
+                    "hashed_reset_token": None,
+                    "hashed_refresh_token": None
+                }
+            }
+        )
+
+    async def sync_oauth_profile_fields(
+        self, email: str, provider: str, full_name: Optional[str], avatar_url: Optional[str]
+    ) -> Optional[dict]:
+        user = await self.get_user_by_email(email)
+        if not user:
+            return None
+
+        profile = user.get("profile", {})
+        update_fields: dict = {"oauth_provider": provider}
+
+        if full_name and not profile.get("full_name"):
+            update_fields["profile.full_name"] = full_name
+        if avatar_url and not profile.get("avatar_url"):
+            update_fields["profile.avatar_url"] = avatar_url
+
+        await self.collection.update_one({"email": email}, {"$set": update_fields})
+        return await self.get_user_by_email(email)
