@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: alloy_mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: alloy_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DATABASE_NAME=alloy_db
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  mongo-backup:
+    image: mongo:7.0
+    container_name: alloy_mongo_backup
+    restart: always
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./backups:/backups
+    entrypoint: >
+      bash -c "while true; do
+        TIMESTAMP=$$(date +%Y-%m-%d_%H-%M-%S);
+        echo \"[Backup] Starting mongodump at $$TIMESTAMP\";
+        mongodump --host mongodb --port 27017 --db alloy_db --archive=/backups/alloy_db_$$TIMESTAMP.gz --gzip;
+        find /backups -type f -name '*.gz' -mtime +30 -delete;
+        echo \"[Backup] Completed. Sleeping for 24h...\";
+        sleep 86400;
+      done"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: alloy_mailpit
+    restart: always
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+volumes:
+  mongo_data:
