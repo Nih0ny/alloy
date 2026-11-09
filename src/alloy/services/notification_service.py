@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import smtplib
+import httpx2
+import base64
 from datetime import datetime, UTC
 from email.message import EmailMessage
 from typing import List, Optional
@@ -85,11 +87,15 @@ class NotificationService:
                 "refresh_token": settings.SMTP_REFRESH_TOKEN,
                 "grant_type": "refresh_token",
             }
-            response = requests.post(token_url, data=payload)
-            if response.status_code == 200:
-                return response.json().get("access_token")
-            else:
-                raise Exception(f"Failed to refresh token: {response.text}")
+
+            with httpx2.Client() as client:
+                response = client.post(token_url, data=payload)
+                if response.status_code != 200:
+                    raise HTTPException(
+                        status_code=500, 
+                        detail=f"Failed to refresh SMTP token: {response.text}"
+                    )
+                return response.json()["access_token"]
 
         msg = EmailMessage()
         msg["Subject"] = subject
