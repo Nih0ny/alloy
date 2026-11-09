@@ -395,3 +395,63 @@ def sample_complaint(client, users_for_complaints, target_event):
     }
     res = client.post("/api/v1/complaints", json=payload, headers=users_for_complaints["vol_headers"])
     return res.json()["id"]
+
+@pytest.fixture
+def notif_users(client, create_user):
+    user_headers = create_user("notif_user@example.com", "Volunteer")
+    other_user_headers = create_user("other_notif@example.com", "Organizer")
+    
+    user_id = client.get("/api/v1/profile/me", headers=user_headers).json()["id"]
+    other_id = client.get("/api/v1/profile/me", headers=other_user_headers).json()["id"]
+    
+    return {
+        "user_headers": user_headers,
+        "other_headers": other_user_headers,
+        "user_id": user_id,
+        "other_id": other_id
+    }
+
+@pytest.fixture
+def sample_notifications(mock_db, notif_users):
+    now = datetime.now(timezone.utc)
+    docs = [
+        {
+            "user_id": notif_users["user_id"],
+            "type": "New application",
+            "title": "New Volunteer",
+            "message": "Someone applied to your event.",
+            "related_entity_id": "event_123",
+            "is_read": False,
+            "created_at": now
+        },
+        {
+            "user_id": notif_users["user_id"],
+            "type": "Event moderation",
+            "title": "Event Approved",
+            "message": "Your event has been approved.",
+            "related_entity_id": "event_123",
+            "is_read": True,
+            "created_at": now
+        },
+        {
+            "user_id": notif_users["other_id"], 
+            "type": "Account security",
+            "title": "Login Alert",
+            "message": "New login detected.",
+            "related_entity_id": None,
+            "is_read": False,
+            "created_at": now
+        }
+    ]
+    
+    asyncio.run(mock_db["notifications"].insert_many(docs))
+    
+    cursor = mock_db["notifications"].find({"user_id": notif_users["user_id"]})
+    user_notifs = asyncio.run(cursor.to_list(length=100))
+    
+    unread_id = next(str(n["_id"]) for n in user_notifs if not n["is_read"])
+    
+    return {
+        "unread_id": unread_id,
+    }
+
