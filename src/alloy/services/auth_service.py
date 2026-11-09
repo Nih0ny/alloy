@@ -1,9 +1,12 @@
+import asyncio
 import logging
 import secrets
 import httpx2
 from fastapi import HTTPException, status
 
 from alloy.repositories.user_repository import UserRepository
+from alloy.services.notification_service import NotificationService
+from alloy.models.notification_schemas import NotificationTypeEnum
 from alloy.models.auth_schemas import (
     UserCreate,
     StatusEnum,
@@ -13,12 +16,14 @@ from alloy.models.auth_schemas import (
     ResetPasswordConfirmRequest,
 )
 from alloy.core import security
+from alloy.core.config import settings
 
 logger = logging.getLogger("alloy.auth")
 
 class AuthService:
-    def __init__(self, user_repo: UserRepository):
+    def __init__(self, user_repo: UserRepository, notif_service: NotificationRepository):
         self.user_repo = user_repo
+        self.notif_service = notif_service
 
     async def _issue_tokens_for_user(self, user: dict) -> dict:
         token_data = {"sub": user["email"], "role": user["role"]}
@@ -115,19 +120,40 @@ class AuthService:
 
     async def request_password_reset(self, req: ForgotPasswordRequest) -> dict:
         user = await self.user_repo.get_user_by_email(req.email)
+
         if user and user.get("status") != StatusEnum.blocked.value:
             reset_token = security.create_password_reset_token(user["email"])
             reset_hash = security.get_token_hash(reset_token)
             await self.user_repo.set_password_reset_token(user["email"], reset_hash)
 
+            user_name = user.get("profile", {}).get("full_name") or "User"
+            subject = "Password Reset — Alloy Platform"
+            body = (
+                f"Hello, {user_name}!\n\n"
+                f"You have requested a password reset in the Alloy mobile application.\n"
+                f"Your one-time code (token) for password reset is:\n\n"
+                f"{reset_token}\n\n"
+                f"Mobile application link (Deep Link):\n"
+                f"alloy://reset-password?code={reset_token}\n\n"
+                f"This code is valid for {settings.RESET_TOKEN_EXPIRE_MINUTES} minutes.\n"
+                f"If you did not request this, simply ignore this email."
+            )
+
+            asyncio.create_task(
+                self.notif_service.send_email_async(
+                    to_email=user["email"],
+                    subject=subject,
+                    body=body
+                )
+            )
+
             logger.info(
-                "PASSWORD_RESET_REQUEST | email=%s | reset_token=%s",
-                user["email"],
-                reset_token
+                "PASSWORD_RESET_EMAIL_QUEUED",
+                extra={"event_type": "security_audit", "recipient": user["email"]}
             )
 
         return {
-            "detail": "If an account with the specified email exists, password reset instructions have been sent."
+            "detail": "If an account with the specified email exists, password reset instructions have been sent to your Email."
         }
 
     async def confirm_password_reset(self, req: ResetPasswordConfirmRequest) -> dict:
@@ -153,7 +179,15 @@ class AuthService:
         new_hashed_pwd = security.get_password_hash(req.new_password)
         await self.user_repo.update_user_password(email, new_hashed_pwd)
 
-        return {"detail": "Password successfully updated. You can now log in with your new password."}
+        await self.notif_service.notify_user(
+            user_id=str(user["_id"]),
+            notif_type=NotificationTypeEnum.account_security,
+            title="Password Successfully Changed",
+            message="Your account password has been successfully reset and updated.",
+            email_to=user["email"]
+        )
+
+        return {"detail": "Password successfully updated. You can now log in with the new password."}
 
     async def _fetch_google_user_info(self, token: str) -> dict:
         async with httpx2.AsyncClient(timeout=10.0) as client:

@@ -37,18 +37,6 @@ oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", aut
 def get_database(request: Request) -> AsyncIOMotorDatabase:
     return request.app.state.mongo_client[settings.DATABASE_NAME]
 
-def get_user_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> UserRepository:
-    return UserRepository(db)
-
-def get_event_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> EventRepository:
-    return EventRepository(db)
-
-def get_auth_service(user_repo: UserRepository = Depends(get_user_repository)) -> AuthService:
-    return AuthService(user_repo)
-
-def get_profile_service(user_repo: UserRepository = Depends(get_user_repository)) -> ProfileService:
-    return ProfileService(user_repo)
-
 def get_notification_repository(
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> NotificationRepository:
@@ -58,6 +46,21 @@ def get_notification_service(
     notif_repo: NotificationRepository = Depends(get_notification_repository)
 ) -> NotificationService:
     return NotificationService(notif_repo)
+
+def get_user_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> UserRepository:
+    return UserRepository(db)
+
+def get_event_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> EventRepository:
+    return EventRepository(db)
+
+def get_auth_service(
+    user_repo: UserRepository = Depends(get_user_repository),
+    notif_service: NotificationService = Depends(get_notification_service)
+) -> AuthService:
+    return AuthService(user_repo, notif_service)
+
+def get_profile_service(user_repo: UserRepository = Depends(get_user_repository)) -> ProfileService:
+    return ProfileService(user_repo)
 
 def get_event_service(
     event_repo: EventRepository = Depends(get_event_repository),
