@@ -18,6 +18,8 @@ from alloy.models.communication_schemas import (
 )
 from alloy.models.event_schemas import EventLifecycleStatusEnum
 from alloy.models.auth_schemas import RoleEnum
+from alloy.services.notification_service import NotificationService
+from alloy.models.notification_schemas import NotificationTypeEnum
 
 
 class CommentService:
@@ -25,11 +27,13 @@ class CommentService:
         self,
         comment_repository: CommentRepository,
         event_repository: EventRepository,
-        user_repository: UserRepository
+        user_repository: UserRepository,
+        notif_service: NotificationService
     ):
         self.comment_repository = comment_repository
         self.event_repository = event_repository
         self.user_repository = user_repository
+        self.notif_service = notif_service
 
     async def _format_comment(self, comment: dict) -> dict:
         author = await self.user_repository.get_user_by_id(comment["author_id"])
@@ -67,9 +71,10 @@ class CommentService:
         if event.get("status") != EventLifecycleStatusEnum.open.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Commenting is available only for events in 'Open' status"
+                detail="Commenting is only available for events with the 'Open' status"
             )
 
+        parent_comment = None
         if comment_in.reply_to_comment_id:
             parent_comment = await self.comment_repository.get_by_id(comment_in.reply_to_comment_id)
             if not parent_comment or parent_comment["event_id"] != event_id:
@@ -78,14 +83,34 @@ class CommentService:
                     detail="The comment you are replying to was not found within this event"
                 )
 
+        author_id = str(current_user["_id"])
         comment_doc = {
             "event_id": event_id,
-            "author_id": str(current_user["_id"]),
+            "author_id": author_id,
             "text": comment_in.text,
             "reply_to_comment_id": comment_in.reply_to_comment_id,
             "created_at": datetime.now(UTC)
         }
         created = await self.comment_repository.create_comment(comment_doc)
+
+        organizer_id = event["organizer_id"]
+        if author_id == organizer_id and parent_comment and parent_comment["author_id"] != organizer_id:
+            await self.notif_service.notify_user(
+                user_id=parent_comment["author_id"],
+                notif_type=NotificationTypeEnum.new_comment,
+                title="The organizer replied to your comment",
+                message=f"New reply under the event «{event['title']}»: {comment_in.text[:80]}",
+                related_entity_id=event_id
+            )
+        elif author_id != organizer_id:
+            await self.notif_service.notify_user(
+                user_id=organizer_id,
+                notif_type=NotificationTypeEnum.new_comment,
+                title="New comment under your event",
+                message=f"A user left a comment on «{event['title']}»: {comment_in.text[:80]}",
+                related_entity_id=event_id
+            )
+
         return await self._format_comment(created)
 
     async def delete_comment(self, comment_id: str, current_user: dict) -> None:

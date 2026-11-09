@@ -16,6 +16,8 @@ from alloy.models.event_schemas import (
     ModerationStatusEnum,
     EventLifecycleStatusEnum,
 )
+from alloy.services.notification_service import NotificationService
+from alloy.models.notification_schemas import NotificationTypeEnum
 from alloy.models.auth_schemas import RoleEnum
 
 EVENT_PHOTOS_DIR = "uploads/events"
@@ -23,9 +25,10 @@ os.makedirs(EVENT_PHOTOS_DIR, exist_ok=True)
 
 
 class EventService:
-    def __init__(self, event_repository: EventRepository, user_repository: UserRepository):
+    def __init__(self, event_repository: EventRepository, user_repository: UserRepository, notif_service: NotificationService):
         self.event_repository = event_repository
         self.user_repository = user_repository
+        self.notif_service = notif_service
 
     def _format_event_card(self, event: dict) -> dict:
         approved = event.get("approved_volunteers_count", 0)
@@ -204,17 +207,37 @@ class EventService:
         if event["organizer_id"] != str(current_user["_id"]):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not the author of this event")
 
-        if event["moderation_status"] != ModerationStatusEnum.approved.value and status_in.status.value != EventLifecycleStatusEnum.cancelled.value:
+        if (
+            event["moderation_status"] != ModerationStatusEnum.approved.value
+            and status_in.status.value != EventLifecycleStatusEnum.cancelled.value
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot activate an event that has not yet passed Administrator moderation"
             )
 
         new_status = status_in.status.value
+
+        cursor = self.event_repository.db["applications"].find({
+            "event_id": event_id,
+            "status": {"$in": ["Pending", "Approved"]}
+        })
+        related_apps = await cursor.to_list(length=500)
+        volunteer_ids = [app["volunteer_id"] for app in related_apps]
+
         updated = await self.event_repository.update_event(event_id, {"status": new_status})
 
         if new_status == EventLifecycleStatusEnum.cancelled.value:
             await self.event_repository.cancel_active_applications_for_event(event_id)
+
+        if volunteer_ids:
+            await self.notif_service.notify_many_users(
+                user_ids=volunteer_ids,
+                notif_type=NotificationTypeEnum.event_status,
+                title="Event status change",
+                message=f"The organizer has changed the status of the event «{event['title']}» to «{new_status}».",
+                related_entity_id=event_id
+            )
 
         return await self._format_event_detail(updated)
 
@@ -285,11 +308,14 @@ class EventService:
         self, event_id: str, mod_in: EventModerationRequest, current_user: dict
     ) -> dict:
         if current_user.get("role") != RoleEnum.admin.value:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Available only to Administrator")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Available to Administrator only")
 
         event = await self.event_repository.get_event_by_id(event_id)
         if not event:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        organizer = await self.user_repository.get_user_by_id(event["organizer_id"])
+        organizer_email = organizer["email"] if organizer else None
 
         if mod_in.action == ModerationStatusEnum.approved:
             update_data = {
@@ -297,12 +323,32 @@ class EventService:
                 "status": EventLifecycleStatusEnum.open.value,
                 "rejection_reason": None
             }
+            notif_title = "Your event has been published!"
+            notif_msg = (
+                f"The administrator has approved your initiative «{event['title']}». "
+                f"It now has the status «Open» and is displayed on the interactive map."
+            )
         else:
             update_data = {
                 "moderation_status": ModerationStatusEnum.rejected.value,
                 "status": EventLifecycleStatusEnum.cancelled.value,
                 "rejection_reason": mod_in.rejection_reason
             }
+            notif_title = "Your event has been rejected by the moderator"
+            notif_msg = (
+                f"The initiative «{event['title']}» was rejected during moderation.\n"
+                f"Reason: {mod_in.rejection_reason}"
+            )
 
         updated = await self.event_repository.update_event(event_id, update_data)
+
+        await self.notif_service.notify_user(
+            user_id=event["organizer_id"],
+            notif_type=NotificationTypeEnum.event_moderation,
+            title=notif_title,
+            message=notif_msg,
+            related_entity_id=event_id,
+            email_to=organizer_email
+        )
+
         return await self._format_event_detail(updated)

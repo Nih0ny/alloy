@@ -13,17 +13,21 @@ from alloy.models.application_schemas import (
 )
 from alloy.models.event_schemas import EventLifecycleStatusEnum
 from alloy.models.auth_schemas import RoleEnum
+from alloy.services.notification_service import NotificationService
+from alloy.models.notification_schemas import NotificationTypeEnum
 
 class ApplicationService:
     def __init__(
         self,
         app_repository: ApplicationRepository,
         event_repository: EventRepository,
-        user_repository: UserRepository
+        user_repository: UserRepository,
+        notif_service: NotificationService
     ):
         self.app_repository = app_repository
         self.event_repository = event_repository
         self.user_repository = user_repository
+        self.notif_service = notif_service
 
     async def _format_volunteer_application(self, app: dict) -> dict:
         event = await self.event_repository.get_event_by_id(app["event_id"])
@@ -75,7 +79,7 @@ class ApplicationService:
         if current_user.get("role") != RoleEnum.volunteer.value:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only users with the 'Volunteer' role can submit participation applications"
+                detail="Only users with the 'Volunteer' role can apply for participation"
             )
 
         event = await self.event_repository.get_event_by_id(event_id)
@@ -85,10 +89,11 @@ class ApplicationService:
         if event.get("status") != EventLifecycleStatusEnum.open.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Application period has ended or the event is not yet open for participation"
+                detail="Application acceptance is closed or the event is not yet open for participation"
             )
 
         volunteer_id = str(current_user["_id"])
+        volunteer_name = current_user.get("profile", {}).get("full_name") or current_user["email"]
         existing_app = await self.app_repository.get_by_event_and_volunteer(event_id, volunteer_id)
 
         if existing_app:
@@ -97,7 +102,7 @@ class ApplicationService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail="You have already applied for this event"
                 )
-            re_applied = await self.app_repository.update_application(
+            saved_app = await self.app_repository.update_application(
                 str(existing_app["_id"]),
                 {
                     "motivation_letter": app_in.motivation_letter,
@@ -106,22 +111,29 @@ class ApplicationService:
                     "rejection_reason": None
                 }
             )
-            return await self._format_volunteer_application(re_applied)
+        else:
+            now = datetime.utcnow()
+            app_dict = {
+                "event_id": event_id,
+                "volunteer_id": volunteer_id,
+                "motivation_letter": app_in.motivation_letter,
+                "agreed_to_share_contacts": app_in.agreed_to_share_contacts,
+                "status": ApplicationStatusEnum.pending.value,
+                "rejection_reason": None,
+                "created_at": now,
+                "updated_at": now
+            }
+            saved_app = await self.app_repository.create_application(app_dict)
 
-        now = datetime.now(UTC)
-        app_dict = {
-            "event_id": event_id,
-            "volunteer_id": volunteer_id,
-            "motivation_letter": app_in.motivation_letter,
-            "agreed_to_share_contacts": app_in.agreed_to_share_contacts,
-            "status": ApplicationStatusEnum.pending.value,
-            "rejection_reason": None,
-            "created_at": now,
-            "updated_at": now
-        }
+        await self.notif_service.notify_user(
+            user_id=event["organizer_id"],
+            notif_type=NotificationTypeEnum.new_application,
+            title="New application from a volunteer",
+            message=f"Volunteer {volunteer_name} has applied to participate in your event «{event['title']}».",
+            related_entity_id=event_id
+        )
 
-        created = await self.app_repository.create_application(app_dict)
-        return await self._format_volunteer_application(created)
+        return await self._format_volunteer_application(saved_app)
 
     async def get_my_applications(self, current_user: dict) -> List[dict]:
         if current_user.get("role") != RoleEnum.volunteer.value:
@@ -165,7 +177,7 @@ class ApplicationService:
         if app["status"] == ApplicationStatusEnum.rejected.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot withdraw an application already rejected by the Organizer"
+                detail="Cannot withdraw an application that has already been rejected by the organizer"
             )
 
         event = await self.event_repository.get_event_by_id(app["event_id"])
@@ -178,11 +190,10 @@ class ApplicationService:
         ]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot withdraw application because the event is already completed or cancelled"
+                detail="Cannot withdraw application as the event has already been completed or cancelled"
             )
 
         was_approved = app["status"] == ApplicationStatusEnum.approved.value
-
         updated_app = await self.app_repository.update_application(
             application_id,
             {"status": ApplicationStatusEnum.withdrawn.value}
@@ -202,6 +213,15 @@ class ApplicationService:
             await self.event_repository.increment_approved_volunteers(
                 app["event_id"], delta=-1, new_status=new_event_status
             )
+
+        volunteer_name = current_user.get("profile", {}).get("full_name") or current_user["email"]
+        await self.notif_service.notify_user(
+            user_id=event["organizer_id"],
+            notif_type=NotificationTypeEnum.application_withdrawn,
+            title="Volunteer withdrew application",
+            message=f"Volunteer {volunteer_name} has cancelled their participation in the event «{event['title']}».",
+            related_entity_id=app["event_id"]
+        )
 
         return await self._format_volunteer_application(updated_app)
 
@@ -277,7 +297,7 @@ class ApplicationService:
         if event["organizer_id"] != str(current_user["_id"]):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not the Organizer of this event"
+                detail="You are not the organizer of this event"
             )
 
         if event["status"] in [
@@ -298,7 +318,7 @@ class ApplicationService:
         if app["status"] == review_in.status.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application already has the status '{review_in.status.value}'"
+                detail=f"The application already has the status '{review_in.status.value}'"
             )
 
         approved_count = event.get("approved_volunteers_count", 0)
@@ -308,7 +328,7 @@ class ApplicationService:
             if approved_count >= quota:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="The required volunteer quota for this event is already fully met"
+                    detail="The required volunteer quota for this event has already been fully reached"
                 )
 
             updated_app = await self.app_repository.update_application(
@@ -321,12 +341,22 @@ class ApplicationService:
 
             new_approved_count = approved_count + 1
             new_event_status = None
-
             if new_approved_count >= quota and event["status"] == EventLifecycleStatusEnum.open.value:
                 new_event_status = EventLifecycleStatusEnum.in_process.value
 
             await self.event_repository.increment_approved_volunteers(
                 app["event_id"], delta=1, new_status=new_event_status
+            )
+
+            await self.notif_service.notify_user(
+                user_id=app["volunteer_id"],
+                notif_type=NotificationTypeEnum.application_status,
+                title="Your application has been approved!",
+                message=(
+                    f"The organizer has approved your application to participate in the event «{event['title']}». "
+                    f"The organizer's contact details are now available in your application details."
+                ),
+                related_entity_id=str(updated_app["_id"])
             )
             return await self._format_volunteer_application(updated_app)
 
@@ -352,4 +382,14 @@ class ApplicationService:
                 app["event_id"], delta=-1, new_status=new_event_status
             )
 
+        reason_suffix = f" Reason: {review_in.rejection_reason}" if review_in.rejection_reason else ""
+        await self.notif_service.notify_user(
+            user_id=app["volunteer_id"],
+            notif_type=NotificationTypeEnum.application_status,
+            title="Your application has been rejected",
+            message=f"Unfortunately, the organizer has rejected your application for the event «{event['title']}».{reason_suffix}",
+            related_entity_id=str(updated_app["_id"])
+        )
+
         return await self._format_volunteer_application(updated_app)
+

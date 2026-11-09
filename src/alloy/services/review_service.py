@@ -13,6 +13,8 @@ from alloy.models.review_schemas import (
 from alloy.models.event_schemas import EventLifecycleStatusEnum
 from alloy.models.application_schemas import ApplicationStatusEnum
 from alloy.models.auth_schemas import RoleEnum
+from alloy.services.notification_service import NotificationService
+from alloy.models.notification_schemas import NotificationTypeEnum
 
 ALLOWED_REVIEW_EVENT_STATUSES = [
     EventLifecycleStatusEnum.in_process.value,
@@ -25,12 +27,14 @@ class ReviewService:
         review_repository: ReviewRepository,
         event_repository: EventRepository,
         app_repository: ApplicationRepository,
-        user_repository: UserRepository
+        user_repository: UserRepository,
+        notif_service: NotificationService
     ):
         self.review_repository = review_repository
         self.event_repository = event_repository
         self.app_repository = app_repository
         self.user_repository = user_repository
+        self.notif_service = notif_service
 
     def _extract_user_name(self, user: dict | None) -> str:
         if not user:
@@ -71,12 +75,25 @@ class ReviewService:
         new_avg_rating = await self.review_repository.calculate_average_rating(reviewee_id)
         await self.user_repository.update_user_rating(reviewee_id, new_avg_rating)
 
+        reviewer_name = self._extract_user_name(reviewer)
+
+        await self.notif_service.notify_user(
+            user_id=reviewee_id,
+            notif_type=NotificationTypeEnum.new_review,
+            title="You received a new review!",
+            message=(
+                f"User {reviewer_name} has rated cooperation with you in the event «{event['title']}» "
+                f"at {rating} out of 5 stars. Your updated rating is {new_avg_rating}."
+            ),
+            related_entity_id=event_id
+        )
+
         return {
             "id": str(created["_id"]),
             "event_id": event_id,
             "event_title": event["title"],
             "reviewer_id": reviewer_id,
-            "reviewer_name": self._extract_user_name(reviewer),
+            "reviewer_name": reviewer_name,
             "reviewee_id": reviewee_id,
             "reviewee_name": self._extract_user_name(reviewee),
             "rating": created["rating"],

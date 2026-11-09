@@ -18,6 +18,7 @@ from alloy.api import (
     messages,
     support,
     complaints,
+    notifications,
 )
 
 DEFAULT_CATEGORIES = ["Animals", "War", "IDPs", "Ecology", "Elderly Care"]
@@ -56,6 +57,9 @@ async def lifespan(app: FastAPI):
     await db["messages"].create_index([("sender_id", 1), ("recipient_id", 1), ("created_at", 1)])
     await db["messages"].create_index([("recipient_id", 1), ("is_read", 1)])
     await db["support_tickets"].create_index("user_id")
+    await db["complaints"].create_index([("status", 1), ("created_at", -1)])
+    await db["complaints"].create_index("accused_user_id")
+    await db["notifications"].create_index([("user_id", 1), ("is_read", 1), ("created_at", -1)])
 
     os.makedirs("uploads/avatars", exist_ok=True)
     os.makedirs("uploads/events", exist_ok=True)
@@ -91,4 +95,5 @@ app.include_router(comments.router)
 app.include_router(messages.router)
 app.include_router(support.router)
 app.include_router(complaints.router)
+app.include_router(notifications.router)
 
