@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 
 from alloy.core.config import settings
+from alloy.core.logging_config import setup_centralized_logging, AuditLoggingMiddleware
 from alloy.api import (
     auth,
     profile,
@@ -20,6 +21,8 @@ from alloy.api import (
     complaints,
     notifications,
 )
+
+setup_centralized_logging()
 
 DEFAULT_CATEGORIES = ["Animals", "War", "IDPs", "Ecology", "Elderly Care"]
 
@@ -68,6 +71,8 @@ async def lifespan(app: FastAPI):
     app.state.mongo_client.close()
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(AuditLoggingMiddleware)
 
 app.mount("/static/avatars", StaticFiles(directory="uploads/avatars"), name="avatars")
 app.mount("/static/events", StaticFiles(directory="uploads/events"), name="event_photos")
