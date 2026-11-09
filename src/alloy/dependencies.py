@@ -28,7 +28,8 @@ from alloy.services.communication_service import (
     SupportService,
 )
 from alloy.services.complaint_service import ComplaintService
-
+from alloy.repositories.notification_repository import NotificationRepository
+from alloy.services.notification_service import NotificationService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -48,11 +49,22 @@ def get_auth_service(user_repo: UserRepository = Depends(get_user_repository)) -
 def get_profile_service(user_repo: UserRepository = Depends(get_user_repository)) -> ProfileService:
     return ProfileService(user_repo)
 
+def get_notification_repository(
+    db: AsyncIOMotorDatabase = Depends(get_database)
+) -> NotificationRepository:
+    return NotificationRepository(db)
+
+def get_notification_service(
+    notif_repo: NotificationRepository = Depends(get_notification_repository)
+) -> NotificationService:
+    return NotificationService(notif_repo)
+
 def get_event_service(
     event_repo: EventRepository = Depends(get_event_repository),
-    user_repo: UserRepository = Depends(get_user_repository)
+    user_repo: UserRepository = Depends(get_user_repository),
+    notif_service: NotificationService = Depends(get_notification_service)
 ) -> EventService:
-    return EventService(event_repo, user_repo)
+    return EventService(event_repo, user_repo, notif_service)
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -91,9 +103,10 @@ def get_application_repository(
 def get_application_service(
     app_repo: ApplicationRepository = Depends(get_application_repository),
     event_repo: EventRepository = Depends(get_event_repository),
-    user_repo: UserRepository = Depends(get_user_repository)
+    user_repo: UserRepository = Depends(get_user_repository),
+    notif_service: NotificationService = Depends(get_notification_service)
 ) -> ApplicationService:
-    return ApplicationService(app_repo, event_repo, user_repo)
+    return ApplicationService(app_repo, event_repo, user_repo, notif_service)
 
 def get_review_repository(
     db: AsyncIOMotorDatabase = Depends(get_database)
@@ -104,9 +117,10 @@ def get_review_service(
     review_repo: ReviewRepository = Depends(get_review_repository),
     event_repo: EventRepository = Depends(get_event_repository),
     app_repo: ApplicationRepository = Depends(get_application_repository),
-    user_repo: UserRepository = Depends(get_user_repository)
+    user_repo: UserRepository = Depends(get_user_repository),
+    notif_service: NotificationService = Depends(get_notification_service)
 ) -> ReviewService:
-    return ReviewService(review_repo, event_repo, app_repo, user_repo)
+    return ReviewService(review_repo, event_repo, app_repo, user_repo, notif_service)
 
 def get_category_repository(
     db: AsyncIOMotorDatabase = Depends(get_database)
@@ -133,10 +147,10 @@ def get_support_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> 
 def get_comment_service(
     comment_repo: CommentRepository = Depends(get_comment_repository),
     event_repo: EventRepository = Depends(get_event_repository),
-    user_repo: UserRepository = Depends(get_user_repository)
+    user_repo: UserRepository = Depends(get_user_repository),
+    notif_service: NotificationService = Depends(get_notification_service)
 ) -> CommentService:
-    return CommentService(comment_repo, event_repo, user_repo)
-
+    return CommentService(comment_repo, event_repo, user_repo, notif_service)
 
 def get_message_service(
     message_repo: MessageRepository = Depends(get_message_repository),
@@ -162,6 +176,8 @@ def get_complaint_service(
     complaint_repo: ComplaintRepository = Depends(get_complaint_repository),
     user_repo: UserRepository = Depends(get_user_repository),
     event_repo: EventRepository = Depends(get_event_repository),
-    comment_repo: CommentRepository = Depends(get_comment_repository)
+    comment_repo: CommentRepository = Depends(get_comment_repository),
+    notif_service: NotificationService = Depends(get_notification_service)
 ) -> ComplaintService:
-    return ComplaintService(complaint_repo, user_repo, event_repo, comment_repo)
+    return ComplaintService(complaint_repo, user_repo, event_repo, comment_repo, notif_service)
+
