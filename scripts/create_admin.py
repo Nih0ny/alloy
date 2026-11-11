@@ -43,6 +43,7 @@ async def create_admin(email: str):
         "hashed_password": hashed_password,
         "role": RoleEnum.admin.value,
         "status": StatusEnum.active.value,
+        "is_email_verified": True,
         "oauth_provider": None,
         "profile": {
             "full_name": "Main Administrator",
