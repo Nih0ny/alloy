@@ -13,7 +13,7 @@ from alloy.models.auth_schemas import (
     OAuthLoginRequest,
 )
 from alloy.services.auth_service import AuthService
-from alloy.dependencies import get_auth_service
+from alloy.dependencies import get_auth_service, get_current_user
 from alloy.core.config import settings
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
@@ -116,7 +116,7 @@ async def verify_email(
 
 @router.post("/resend-verification", status_code=status.HTTP_200_OK)
 async def resend_verification_email(
-    req: ResendVerificationRequest,
+    current_user: dict = Depends(get_current_user),
     auth_service: AuthService = Depends(get_auth_service)
 ):
-    return await auth_service.resend_verification_email(req.email)
+    return await auth_service.resend_verification_email(current_user)
