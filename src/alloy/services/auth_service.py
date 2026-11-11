@@ -386,19 +386,12 @@ class AuthService:
         return {"detail": "Email successfully verified!"}
 
 
-    async def resend_verification_email(self, email: str) -> dict:
-        user = await self.user_repo.get_user_by_email(email)
-        if not user:
-            return {"detail": "If the account exists and is not yet verified, an email with the code has been resent."}
-
-        if user.get("status") == StatusEnum.blocked.value:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is blocked")
-
-        if user.get("is_email_verified"):
+    async def resend_verification_email(self, current_user: dict) -> dict:
+        if current_user.get("is_email_verified"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This email address is already verified"
+                detail="Your email is already verified"
             )
 
-        await self._send_verification_email(email)
-        return {"detail": "Email verification letter has been successfully resent."}
+        await self._send_verification_email(current_user["email"])
+        return {"detail": "Verification email has been successfully resent."}

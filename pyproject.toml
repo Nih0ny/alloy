@@ -29,5 +29,6 @@ dev = [
     "httpx2>=2.16.0",
     "mongomock-motor>=0.0.36",
     "pytest>=9.2.0",
+    "pytest-mock>=3.17.0",
     "respx>=0.23.1",
 ]
