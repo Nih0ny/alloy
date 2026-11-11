@@ -5,6 +5,7 @@ from alloy.models.profile_schemas import (
     ProfileUpdate,
     MyProfileResponse,
     PublicProfileResponse,
+    EmailNotificationsToggle,
 )
 from alloy.services.profile_service import ProfileService
 from alloy.dependencies import get_current_user, get_profile_service
@@ -29,6 +30,13 @@ async def update_my_profile(
 ):
     return await profile_service.update_my_profile(current_user, profile_in)
 
+@router.patch("/me/email-notifications", status_code=status.HTTP_200_OK)
+async def toggle_my_email_notifications(
+    settings_in: EmailNotificationsToggle,
+    current_user: dict = Depends(get_current_user),
+    profile_service: ProfileService = Depends(get_profile_service)
+):
+    return await profile_service.toggle_email_notifications(current_user, settings_in.enabled)
 
 @router.get("/avatar", response_class=FileResponse)
 async def get_my_avatar(

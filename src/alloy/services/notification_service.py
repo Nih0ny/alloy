@@ -15,8 +15,13 @@ from alloy.models.notification_schemas import NotificationTypeEnum
 logger = logging.getLogger("alloy.notifications")
 
 class NotificationService:
-    def __init__(self, notif_repo: NotificationRepository):
+    def __init__(
+        self,
+        notif_repo: NotificationRepository,
+        user_repo: UserRepository
+    ):
         self.notif_repo = notif_repo
+        self.user_repo = user_repo
 
     def _format_notification(self, doc: dict) -> dict:
         return {
@@ -37,7 +42,8 @@ class NotificationService:
         title: str,
         message: str,
         related_entity_id: Optional[str] = None,
-        email_to: Optional[str] = None
+        email_to: Optional[str] = None,
+        force_email: bool = False
     ) -> dict:
         doc = {
             "user_id": user_id,
@@ -50,8 +56,20 @@ class NotificationService:
         }
         created = await self.notif_repo.create_notification(doc)
 
-        if email_to:
-            asyncio.create_task(self.send_email_async(email_to, title, message))
+        user = await self.user_repo.get_user_by_id(user_id)
+        if user:
+            target_email = email_to or user.get("email")
+            email_enabled = user.get("profile", {}).get("email_notifications_enabled", True)
+
+            is_security_critical = force_email or (notif_type == NotificationTypeEnum.account_security)
+
+            if target_email and (email_enabled or is_security_critical):
+                asyncio.create_task(self.send_email_async(target_email, title, message))
+            elif target_email and not email_enabled:
+                logger.info(
+                    "EMAIL_SKIPPED_BY_USER_PREFERENCE",
+                    extra={"event_type": "email_skipped", "user_id": user_id, "recipient": target_email}
+                )
 
         return self._format_notification(created)
 
@@ -63,6 +81,10 @@ class NotificationService:
         message: str,
         related_entity_id: Optional[str] = None
     ) -> None:
+        unique_ids = list(set(user_ids))
+        if not unique_ids:
+            return
+
         now = datetime.now(UTC)
         docs = [
             {
@@ -74,9 +96,14 @@ class NotificationService:
                 "is_read": False,
                 "created_at": now
             }
-            for uid in set(user_ids)
+            for uid in unique_ids
         ]
         await self.notif_repo.create_many_notifications(docs)
+
+        for uid in unique_ids:
+            user = await self.user_repo.get_user_by_id(uid)
+            if user and user.get("profile", {}).get("email_notifications_enabled", True):
+                asyncio.create_task(self.send_email_async(user["email"], title, message))
 
     def _send_smtp_sync(self, to_email: str, subject: str, body: str) -> None:
         def get_fresh_access_token():
