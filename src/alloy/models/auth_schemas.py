@@ -81,6 +81,21 @@ class OAuthLoginRequest(BaseModel):
             raise ValueError("You must agree to the platform rules")
         return self
 
+class AuthUserResponse(BaseModel):
+    id: str
+    email: EmailStr
+    role: RoleEnum
+    status: StatusEnum
+    is_email_verified: bool = False
+    access_token: str
+    token_type: str = "bearer"
+
+class VerifyEmailRequest(BaseModel):
+    verification_token: str = Field(..., description="Email verification token received via email")
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
 UserCreate.model_rebuild()
 ResetPasswordConfirmRequest.model_rebuild()
 OAuthLoginRequest.model_rebuild()

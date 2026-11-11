@@ -9,7 +9,7 @@ from alloy.models.complaint_schemas import (
     AdminUserRegistryItem,
 )
 from alloy.services.complaint_service import ComplaintService
-from alloy.dependencies import get_current_user, get_complaint_service
+from alloy.dependencies import get_current_user, get_verified_user, get_complaint_service
 
 router = APIRouter(prefix="/api/v1", tags=["Complaints & User Moderation"])
 
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1", tags=["Complaints & User Moderation"])
 )
 async def create_complaint(
     complaint_in: ComplaintCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_verified_user),
     complaint_service: ComplaintService = Depends(get_complaint_service)
 ):
     return await complaint_service.submit_complaint(complaint_in, current_user)

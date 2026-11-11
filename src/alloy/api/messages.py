@@ -7,7 +7,7 @@ from alloy.models.communication_schemas import (
     ConversationSummaryResponse,
 )
 from alloy.services.communication_service import MessageService
-from alloy.dependencies import get_current_user, get_message_service
+from alloy.dependencies import get_current_user, get_verified_user, get_message_service
 
 router = APIRouter(prefix="/api/v1/messages", tags=["Messages"])
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/v1/messages", tags=["Messages"])
 @router.post("", response_model=DirectMessageResponse, status_code=status.HTTP_201_CREATED)
 async def send_direct_message(
     msg_in: DirectMessageCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_verified_user),
     message_service: MessageService = Depends(get_message_service)
 ):
     return await message_service.send_message(msg_in, current_user)

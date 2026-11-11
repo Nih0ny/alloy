@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     SMTP_CLIENT_SECRET: Optional[str]
     SMTP_REFRESH_TOKEN: Optional[str]
 
+    EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS: int = 24
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()

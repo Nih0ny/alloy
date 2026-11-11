@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from alloy.models.communication_schemas import CommentCreate, CommentResponse
 from alloy.services.communication_service import CommentService
-from alloy.dependencies import get_current_user, get_comment_service
+from alloy.dependencies import get_current_user, get_verified_user, get_comment_service
 
 router = APIRouter(prefix="/api/v1", tags=["Comments"])
 
@@ -26,7 +26,7 @@ async def list_event_comments(
 async def create_event_comment(
     event_id: str,
     comment_in: CommentCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_verified_user),
     comment_service: CommentService = Depends(get_comment_service)
 ):
     return await comment_service.add_comment(event_id, comment_in, current_user)

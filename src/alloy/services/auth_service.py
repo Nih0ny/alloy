@@ -44,7 +44,7 @@ class AuthService:
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User with this email already exists"
+                detail="A user with this email already exists"
             )
 
         hashed_password = security.get_password_hash(user_in.password)
@@ -53,22 +53,34 @@ class AuthService:
             "hashed_password": hashed_password,
             "role": user_in.role.value,
             "status": StatusEnum.active.value,
+            "is_email_verified": False,
+            "hashed_verification_token": None,
             "oauth_provider": None,
             "profile": {
                 "full_name": None,
                 "phone": None,
                 "avatar_url": None,
                 "description": None,
-                "rating": 0.0
+                "rating": 0.0,
+                "email_notifications_enabled": True
             }
         }
 
         new_user = await self.user_repo.create_user(user_dict)
+
+        await self._send_verification_email(new_user["email"])
+
+        tokens = await self._issue_tokens_for_user(new_user)
+
         return {
             "id": str(new_user["_id"]),
             "email": new_user["email"],
             "role": new_user["role"],
-            "status": new_user["status"]
+            "status": new_user["status"],
+            "is_email_verified": False,
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+            "token_type": "bearer"
         }
 
     async def authenticate_user(self, email: str, password: str) -> dict:
@@ -247,8 +259,8 @@ class AuthService:
             }
 
     async def authenticate_oauth(
-        self, provider: OAuthProviderEnum, oauth_in: OAuthLoginRequest
-    ) -> dict:
+    self, provider: OAuthProviderEnum, oauth_in: OAuthLoginRequest
+) -> dict:
         if provider == OAuthProviderEnum.google:
             social_data = await self._fetch_google_user_info(oauth_in.token)
         else:
@@ -276,11 +288,22 @@ class AuthService:
                 avatar_url=social_data.get("avatar_url")
             )
         else:
+            if not oauth_in.role:
+                raise HTTPException(
+                    status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+                    detail="To complete the first registration via OAuth, you must select a role ('Volunteer' or 'Organizer')"
+                )
+            if not oauth_in.agreed_to_rules:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="You must agree to the platform rules"
+                )
+
             random_password_hash = security.get_password_hash(secrets.token_urlsafe(32))
             user_dict = {
                 "email": email,
                 "hashed_password": random_password_hash,
-                "role": oauth_in.role.value if oauth_in.role else "Volunteer",
+                "role": oauth_in.role.value,
                 "status": StatusEnum.active.value,
                 "oauth_provider": provider.value,
                 "profile": {
@@ -294,3 +317,87 @@ class AuthService:
             user = await self.user_repo.create_user(user_dict)
 
         return await self._issue_tokens_for_user(user)
+
+    async def _send_verification_email(self, email: str) -> None:
+        verification_token = security.create_email_verification_token(email)
+        verification_hash = security.get_token_hash(verification_token)
+        await self.user_repo.set_email_verification_token(email, verification_hash)
+
+        subject = "Email Verification — Alloy Platform"
+        body = (
+            f"Welcome to the Alloy local mutual aid platform!\n\n"
+            f"To verify your email address, use this code in the app:\n\n"
+            f"{verification_token}\n\n"
+            f"Or follow the direct link (Deep Link):\n"
+            f"alloy://verify-email?token={verification_token}\n\n"
+            f"The link is valid for {settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS} hours."
+        )
+
+        asyncio.create_task(
+            self.notif_service.send_email_async(
+                to_email=email,
+                subject=subject,
+                body=body
+            )
+        )
+
+        logger.info(
+            "EMAIL_VERIFICATION_SENT",
+            extra={"event_type": "security_audit", "recipient": email}
+        )
+
+    async def verify_email(self, token: str) -> dict:
+        payload = security.decode_token(token)
+        if not payload or payload.get("type") != "email_verification":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired email verification token"
+            )
+
+        email = payload.get("sub")
+        user = await self.user_repo.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        if user.get("is_email_verified"):
+            return {"detail": "Email has already been verified."}
+
+        saved_hash = user.get("hashed_verification_token")
+        if not saved_hash or security.get_token_hash(token) != saved_hash:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This verification code is no longer valid or a newer one has been generated"
+            )
+
+        await self.user_repo.mark_email_as_verified(email)
+
+        await self.notif_service.notify_user(
+            user_id=str(user["_id"]),
+            notif_type=NotificationTypeEnum.account_security,
+            title="Email successfully verified!",
+            message="Your email has been verified. You now have access to all features of the Alloy platform."
+        )
+
+        logger.info(
+            "EMAIL_VERIFIED_SUCCESSFULLY",
+            extra={"event_type": "security_audit", "user_id": str(user["_id"]), "recipient": email}
+        )
+        return {"detail": "Email successfully verified!"}
+
+
+    async def resend_verification_email(self, email: str) -> dict:
+        user = await self.user_repo.get_user_by_email(email)
+        if not user:
+            return {"detail": "If the account exists and is not yet verified, an email with the code has been resent."}
+
+        if user.get("status") == StatusEnum.blocked.value:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is blocked")
+
+        if user.get("is_email_verified"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This email address is already verified"
+            )
+
+        await self._send_verification_email(email)
+        return {"detail": "Email verification letter has been successfully resent."}

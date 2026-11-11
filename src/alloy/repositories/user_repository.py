@@ -107,3 +107,23 @@ class UserRepository:
 
         await self.collection.update_one({"email": email}, {"$set": update_fields})
         return await self.get_user_by_email(email)
+
+    async def set_email_verification_token(
+    self, email: str, verification_token_hash: Optional[str]
+) -> None:
+        await self.collection.update_one(
+            {"email": email},
+            {"$set": {"hashed_verification_token": verification_token_hash}}
+        )
+
+
+    async def mark_email_as_verified(self, email: str) -> None:
+        await self.collection.update_one(
+            {"email": email},
+            {
+                "$set": {
+                    "is_email_verified": True,
+                    "hashed_verification_token": None
+                }
+            }
+        )

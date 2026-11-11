@@ -3,8 +3,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from alloy.models.auth_schemas import (
     UserCreate,
-    UserResponse,
+    AuthUserResponse,
     Token,
+    VerifyEmailRequest,
+    ResendVerificationRequest,
     ForgotPasswordRequest,
     ResetPasswordConfirmRequest,
     OAuthProviderEnum,
@@ -26,12 +28,15 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
     )
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=AuthUserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
+    response: Response,
     user_in: UserCreate,
     auth_service: AuthService = Depends(get_auth_service)
 ):
-    return await auth_service.register_user(user_in)
+    result = await auth_service.register_user(user_in)
+    _set_refresh_cookie(response, result["refresh_token"])
+    return result
 
 @router.post("/login", response_model=Token)
 async def login(
@@ -100,3 +105,18 @@ async def logout(
         samesite="lax"
     )
     return {"detail": "Successful exit"}
+
+@router.post("/verify-email", status_code=status.HTTP_200_OK)
+async def verify_email(
+    req: VerifyEmailRequest,
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    return await auth_service.verify_email(req.verification_token)
+
+
+@router.post("/resend-verification", status_code=status.HTTP_200_OK)
+async def resend_verification_email(
+    req: ResendVerificationRequest,
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    return await auth_service.resend_verification_email(req.email)

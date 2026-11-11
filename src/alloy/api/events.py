@@ -12,6 +12,7 @@ from alloy.models.event_schemas import (
 from alloy.services.event_service import EventService
 from alloy.dependencies import (
     get_current_user,
+    get_verified_user,
     get_optional_current_user,
     get_event_service,
 )
@@ -49,7 +50,7 @@ async def get_pending_moderation_events(
 @router.post("", response_model=EventDetailResponse, status_code=status.HTTP_201_CREATED)
 async def create_event(
     event_in: EventCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_verified_user),
     event_service: EventService = Depends(get_event_service)
 ):
     return await event_service.create_event(event_in, current_user)
