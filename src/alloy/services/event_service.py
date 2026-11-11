@@ -134,14 +134,21 @@ class EventService:
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="This event is not available for public viewing"
+                    detail="This event is not available for unauthorized viewing"
                 )
-            is_owner = str(current_user["_id"]) == event["organizer_id"]
+            user_id = str(current_user["_id"])
+            is_owner = user_id == event["organizer_id"]
             is_admin = current_user.get("role") == RoleEnum.admin.value
-            if not (is_owner or is_admin):
+
+            has_application = await self.event_repository.db["applications"].find_one({
+                "event_id": event_id,
+                "volunteer_id": user_id
+            }) is not None
+
+            if not (is_owner or is_admin or has_application):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You do not have permission to view this event"
+                    detail="You do not have access to view this event"
                 )
 
         return await self._format_event_detail(event)
@@ -187,12 +194,20 @@ class EventService:
         if not update_data:
             return await self._format_event_detail(event)
 
+        approved_count = event.get("approved_volunteers_count", 0)
+        if "volunteer_quota" in update_data and update_data["volunteer_quota"] < approved_count:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"The new quota ({update_data['volunteer_quota']}) cannot be less than the number of already approved volunteers ({approved_count})"
+            )
+
         if "location" in update_data and update_data["location"] is not None:
             update_data["location"] = event_in.location.model_dump()
 
-        update_data["moderation_status"] = ModerationStatusEnum.pending.value
-        update_data["status"] = EventLifecycleStatusEnum.draft.value
-        update_data["rejection_reason"] = None
+        if approved_count == 0:
+            update_data["moderation_status"] = ModerationStatusEnum.pending.value
+            update_data["status"] = EventLifecycleStatusEnum.draft.value
+            update_data["rejection_reason"] = None
 
         updated = await self.event_repository.update_event(event_id, update_data)
         return await self._format_event_detail(updated)
