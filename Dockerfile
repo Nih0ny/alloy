@@ -6,9 +6,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock* ./
+COPY pyproject.toml uv.lock* README.md ./
 
-RUN uv sync --frozen --no-install-project --no-dev || uv sync --no-install-project --no-dev
+RUN uv sync --frozen --no-install-project --no-dev || uv sync --no-dev
 
 COPY src ./src
 
@@ -19,4 +19,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "xelp.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uv", "run", "uvicorn", "alloy.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
