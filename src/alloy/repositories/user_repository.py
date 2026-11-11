@@ -41,6 +41,9 @@ class UserRepository:
             "profile.phone": profile_data.get("phone"),
             "profile.description": profile_data.get("description"),
         }
+        if profile_data.get("email_notifications_enabled") is not None:
+            update_fields["profile.email_notifications_enabled"] = profile_data["email_notifications_enabled"]
+
         await self.collection.update_one(
             {"email": email},
             {"$set": update_fields}
@@ -127,3 +130,10 @@ class UserRepository:
                 }
             }
         )
+
+    async def set_email_notifications_preference(self, email: str, enabled: bool) -> Optional[dict]:
+        await self.collection.update_one(
+            {"email": email},
+            {"$set": {"profile.email_notifications_enabled": enabled}}
+        )
+        return await self.get_user_by_email(email)

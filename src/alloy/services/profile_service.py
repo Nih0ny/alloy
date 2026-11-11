@@ -79,6 +79,7 @@ class ProfileService:
             "avatar_url": profile.get("avatar_url"),
             "description": profile.get("description"),
             "rating": profile.get("rating", 0.0),
+            "email_notifications_enabled": profile.get("email_notifications_enabled", True),
             "reviews": reviews,
             "my_tasks": my_tasks
         }
@@ -177,3 +178,11 @@ class ProfileService:
             if os.path.exists(file_path):
                 os.remove(file_path)
         await self.user_repo.update_user_avatar(email, None)
+
+    async def toggle_email_notifications(self, current_user: dict, enabled: bool) -> dict:
+        await self.user_repo.set_email_notifications_preference(current_user["email"], enabled)
+        status_text = "enabled" if enabled else "disabled"
+        return {
+            "message": f"Email notifications have been successfully {status_text}",
+            "email_notifications_enabled": enabled
+        }

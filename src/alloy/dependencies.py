@@ -42,13 +42,14 @@ def get_notification_repository(
 ) -> NotificationRepository:
     return NotificationRepository(db)
 
-def get_notification_service(
-    notif_repo: NotificationRepository = Depends(get_notification_repository)
-) -> NotificationService:
-    return NotificationService(notif_repo)
-
 def get_user_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> UserRepository:
     return UserRepository(db)
+
+def get_notification_service(
+    notif_repo: NotificationRepository = Depends(get_notification_repository),
+    user_repo: UserRepository = Depends(get_user_repository)
+) -> NotificationService:
+    return NotificationService(notif_repo, user_repo)
 
 def get_event_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> EventRepository:
     return EventRepository(db)

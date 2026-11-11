@@ -311,7 +311,8 @@ class AuthService:
                     "phone": None,
                     "avatar_url": social_data.get("avatar_url"),
                     "description": None,
-                    "rating": 0.0
+                    "rating": 0.0,
+                    "email_notifications_enabled": True
                 }
             }
             user = await self.user_repo.create_user(user_dict)

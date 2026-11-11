@@ -10,6 +10,10 @@ class ProfileUpdate(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100, description="Full name (First and Last name) — required field")
     phone: Optional[str] = Field(None, description="Phone number in the format +380XXXXXXXXX")
     description: Optional[str] = Field(None, max_length=1000, description="Bio description (skills, experience, motivation)")
+    email_notifications_enabled: Optional[bool] = Field(
+        None,
+        description="Whether informational notifications are allowed to be sent to Email"
+    )
 
     @field_validator("phone")
     @classmethod
@@ -57,3 +61,6 @@ class MyProfileResponse(PublicProfileResponse):
     is_email_verified: bool = False
     email_notifications_enabled: bool = True
     my_tasks: List[MyTaskHistoryItem] = []
+
+class EmailNotificationsToggle(BaseModel):
+    enabled: bool = Field(..., description="True — enable notifications, False — disable")

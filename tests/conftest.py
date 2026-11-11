@@ -16,6 +16,23 @@ def mock_db():
     
     return db
 
+@pytest.fixture(autouse=True)
+def mock_smtp_tls(mocker):
+    mock_smtp = mocker.patch("smtplib.SMTP")
+    smtp_instance = mock_smtp.return_value
+    smtp_instance.starttls.return_value = (220, b"Ready to start TLS")
+    smtp_instance.login.return_value = (235, b"Accepted")
+    smtp_instance.sendmail.return_value = {}
+    smtp_instance.send_message.return_value = {}
+
+    mock_smtp_ssl = mocker.patch("smtplib.SMTP_SSL")
+    ssl_instance = mock_smtp_ssl.return_value
+    ssl_instance.login.return_value = (235, b"Accepted")
+    ssl_instance.sendmail.return_value = {}
+    ssl_instance.send_message.return_value = {}
+
+    return smtp_instance
+
 @pytest.fixture
 def client(mock_db):
     def override_get_db():
