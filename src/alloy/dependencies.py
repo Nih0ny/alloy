@@ -87,6 +87,16 @@ async def get_current_user(
 
     return user
 
+async def get_verified_user(
+    current_user: dict = Depends(get_current_user)
+) -> dict:
+    if not current_user.get("is_email_verified", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must verify your email address to perform this action"
+        )
+    return current_user
+
 async def get_optional_current_user(
     token: Optional[str] = Depends(oauth2_scheme_optional),
     user_repo: UserRepository = Depends(get_user_repository)

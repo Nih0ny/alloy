@@ -97,20 +97,38 @@ def admin_data():
     }
 
 @pytest.fixture
-def volunteer_headers(client, volunteer_data):
+def volunteer_headers(client, mock_db, volunteer_data):
     client.post("/api/v1/auth/register", json=volunteer_data)
+    
+    asyncio.run(mock_db["users"].update_one(
+        {"email": volunteer_data["email"]},
+        {"$set": {"is_email_verified": True}}  
+    ))
+
     res = client.post("/api/v1/auth/login", data={"username": volunteer_data["email"], "password": volunteer_data["password"]})
     return {"Authorization": f"Bearer {res.json()['access_token']}"}
 
 @pytest.fixture
-def organizer_headers(client, organizer_data):
+def organizer_headers(client, mock_db, organizer_data):
     client.post("/api/v1/auth/register", json=organizer_data)
+    
+    asyncio.run(mock_db["users"].update_one(
+        {"email": organizer_data["email"]},
+        {"$set": {"is_email_verified": True}}
+    ))
+
     res = client.post("/api/v1/auth/login", data={"username": organizer_data["email"], "password": organizer_data["password"]})
     return {"Authorization": f"Bearer {res.json()['access_token']}"}
 
 @pytest.fixture
-def another_organizer_headers(client, another_organizer_data):
+def another_organizer_headers(client, mock_db, another_organizer_data):
     client.post("/api/v1/auth/register", json=another_organizer_data)
+    
+    asyncio.run(mock_db["users"].update_one(
+        {"email": another_organizer_data["email"]},
+        {"$set": {"is_email_verified": True}}
+    ))
+
     res = client.post("/api/v1/auth/login", data={"username": another_organizer_data["email"], "password": another_organizer_data["password"]})
     return {"Authorization": f"Bearer {res.json()['access_token']}"}
 
@@ -162,8 +180,8 @@ def event_create_data(client, admin_headers):
     }
 
 @pytest.fixture
-def create_user(client):
-    def _create(email, role):
+def create_user(client, mock_db):
+    def _create(email, role, is_verified=True):
         data = {
             "email": email,
             "password": "StrongPassword123!",
@@ -172,9 +190,26 @@ def create_user(client):
             "agreed_to_rules": True
         }
         client.post("/api/v1/auth/register", json=data)
+        
+        if is_verified:
+            asyncio.run(mock_db["users"].update_one(
+                {"email": email},
+                {"$set": {"is_email_verified": True}}
+            ))
+
         res = client.post("/api/v1/auth/login", data={"username": email, "password": "StrongPassword123!"})
         return {"Authorization": f"Bearer {res.json().get('access_token')}"}
     return _create
+
+
+@pytest.fixture
+def unverified_user_headers(create_user):
+    return create_user("unverified@example.com", "Volunteer", is_verified=False)
+
+
+@pytest.fixture
+def unverified_org_headers(create_user):
+    return create_user("unverified_org@example.com", "Organizer", is_verified=False)
 
 @pytest.fixture
 def vol1_headers(create_user):

@@ -9,6 +9,7 @@ from alloy.models.communication_schemas import (
 from alloy.services.communication_service import SupportService
 from alloy.dependencies import (
     get_current_user,
+    get_verified_user,
     get_optional_current_user,
     get_support_service,
 )

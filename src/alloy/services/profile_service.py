@@ -73,6 +73,7 @@ class ProfileService:
             "email": current_user["email"],
             "role": current_user["role"],
             "status": current_user["status"],
+            "is_email_verified": current_user.get("is_email_verified", False),
             "full_name": profile.get("full_name"),
             "phone": profile.get("phone"),
             "avatar_url": profile.get("avatar_url"),

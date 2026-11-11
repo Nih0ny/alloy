@@ -8,7 +8,7 @@ from alloy.models.application_schemas import (
     EventApplicationsManageResponse,
 )
 from alloy.services.application_service import ApplicationService
-from alloy.dependencies import get_current_user, get_application_service
+from alloy.dependencies import get_current_user, get_verified_user, get_application_service
 
 router = APIRouter(prefix="/api/v1", tags=["Volunteer Applications"])
 
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/v1", tags=["Volunteer Applications"])
 async def apply_for_event(
     event_id: str,
     app_in: ApplicationCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_verified_user),
     app_service: ApplicationService = Depends(get_application_service)
 ):
     return await app_service.submit_application(event_id, app_in, current_user)

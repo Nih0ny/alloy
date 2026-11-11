@@ -54,4 +54,6 @@ class MyProfileResponse(PublicProfileResponse):
     email: EmailStr
     phone: Optional[str] = None
     status: StatusEnum
+    is_email_verified: bool = False
+    email_notifications_enabled: bool = True
     my_tasks: List[MyTaskHistoryItem] = []

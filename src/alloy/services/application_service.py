@@ -112,7 +112,7 @@ class ApplicationService:
                 }
             )
         else:
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             app_dict = {
                 "event_id": event_id,
                 "volunteer_id": volunteer_id,
